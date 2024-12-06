@@ -284,7 +284,7 @@ const getProductImage = (product: Product, categoryObj: typeof categories[0] | u
   return { mainSrc };
 };
 
-export function StockFinderComponent() {
+export function StockFinder() {
   // Move these state declarations to the top of the component
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -1358,3 +1358,5 @@ export function StockFinderComponent() {
     </div>
   )
 }
+
+export default StockFinder;
