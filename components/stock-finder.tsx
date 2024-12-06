@@ -140,7 +140,7 @@ const PulsingImage = styled(Image)`
 const desktopColumns = (
   setEditingProduct: React.Dispatch<React.SetStateAction<Product | null>>,
   setIsEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>,
-  handleEditClick: (product: Product) => void
+  handleEditClick: (product: Product, e: React.MouseEvent) => void
 ): ColumnDef<Product>[] => [
   {
     accessorKey: "Ref. produit",
@@ -194,10 +194,7 @@ const desktopColumns = (
           <Button
             variant="ghost"
             size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleEditClick(row.original);
-            }}
+            onClick={(e) => handleEditClick(row.original, e)}
             className="absolute right-0 text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1"
           >
             <FiEdit className="h-3 w-3" />
@@ -319,8 +316,14 @@ export function StockFinder() {
 
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
-  const handleEditClick = (product: Product) => {
+  const handleEditClick = (product: Product, e: React.MouseEvent) => {
+    // Stop event propagation to prevent the row click handler from firing
+    e.stopPropagation();
+    
+    // Set the product being edited
     setEditingProduct(product);
+    
+    // Open the edit modal
     setIsEditModalOpen(true);
   };
 
@@ -343,7 +346,7 @@ export function StockFinder() {
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleEditClick(row.original);
+                  handleEditClick(row.original, e);
                 }}
                 className="flex-shrink-0 h-8 w-8 p-0 hover:bg-blue-50 text-blue-600"
               >
@@ -1338,7 +1341,10 @@ export function StockFinder() {
 
       <PriceEditModal 
         isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingProduct(null);
+        }}
         editingProduct={editingProduct}
         onUpdateBFPrice={handleUpdateBFPrice}
       />
