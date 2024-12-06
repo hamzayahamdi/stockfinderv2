@@ -35,6 +35,7 @@ import { PriceEditModal } from './price-edit-modal';
 import { Product } from '../types/product';
 import { Notification } from './Notification';
 import { PrixPromoHistory } from './prix-promo-history';
+import { PasswordModal } from './password-modal';
 
 type Category = {
   name: string;
@@ -316,15 +317,13 @@ export function StockFinder() {
 
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [pendingEditProduct, setPendingEditProduct] = useState<Product | null>(null);
+
   const handleEditClick = (product: Product, e: React.MouseEvent) => {
-    // Stop event propagation to prevent the row click handler from firing
     e.stopPropagation();
-    
-    // Set the product being edited
-    setEditingProduct(product);
-    
-    // Open the edit modal
-    setIsEditModalOpen(true);
+    setPendingEditProduct(product);
+    setIsPasswordModalOpen(true);
   };
 
   const isMobile = useMediaQuery({ maxWidth: 768 });
@@ -876,6 +875,15 @@ export function StockFinder() {
     tableRow: `hover:bg-blue-50 transition-all duration-200`,
   };
 
+  const handlePasswordVerification = (success: boolean) => {
+    setIsPasswordModalOpen(false);
+    if (success && pendingEditProduct) {
+      setEditingProduct(pendingEditProduct);
+      setIsEditModalOpen(true);
+    }
+    setPendingEditProduct(null);
+  };
+
   return (
     <div className="flex h-screen bg-gray-100 font-sans uppercase">
       {/* Sidebar */}
@@ -1360,6 +1368,15 @@ export function StockFinder() {
       <PrixPromoHistory 
         isOpen={isHistoryModalOpen}
         onClose={() => setIsHistoryModalOpen(false)}
+      />
+
+      <PasswordModal 
+        isOpen={isPasswordModalOpen}
+        onClose={() => {
+          setIsPasswordModalOpen(false);
+          setPendingEditProduct(null);
+        }}
+        onVerification={handlePasswordVerification}
       />
     </div>
   )

@@ -34,7 +34,7 @@ export const Notification: React.FC<NotificationProps> = ({ isVisible, onClose, 
             <div className="bg-green-500 rounded-full p-1">
               <FiCheck className="text-white text-sm" />
             </div>
-            <span className="text-sm font-medium">Black Friday Price Updated</span>
+            <span className="text-sm font-medium">Prix Promo Updated</span>
           </div>
           <div className="mt-1 text-xs truncate">{productLabel}</div>
           <div className="mt-1 flex items-center space-x-2">
