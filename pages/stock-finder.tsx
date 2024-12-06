@@ -1,5 +1,5 @@
 import Head from 'next/head';
-import { StockFinderComponent } from '../components/stock-finder';
+import StockFinder from '../components/stock-finder';
 
 export default function StockFinder() {
   return (
