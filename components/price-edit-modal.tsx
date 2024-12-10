@@ -605,18 +605,21 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
     );
   };
 
-  // Update the useEffect to include all required dependencies
+  // Update the useEffect that triggers AI analysis
   useEffect(() => {
-    if (
+    const shouldFetchAI = 
+      isOpen && // Only when modal is open
       editingProduct && 
       salesMetrics && 
       supplierReceptions.length > 0 &&
       typeof editingProduct['Prix Promo'] === 'number' &&
-      typeof salesMetrics.salesVelocity === 'number'
-    ) {
+      typeof salesMetrics.salesVelocity === 'number' &&
+      !isAiLoading; // Prevent refetch while loading
+
+    if (shouldFetchAI) {
       fetchAIPricingAnalysis();
     }
-  }, [editingProduct, salesMetrics, supplierReceptions, crValue]);
+  }, [isOpen]); // Only depend on modal open state
 
   useEffect(() => {
     if (isOpen && editingProduct) {
