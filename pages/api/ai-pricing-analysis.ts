@@ -48,6 +48,24 @@ const validateMarginCalculation = (price: number, costPrice: number | null) => {
   return margin;
 };
 
+// Add this helper function for psychological pricing
+const applyPsychologicalPricing = (price: number): number => {
+  // Round to nearest 9-ending price
+  const basePrice = Math.round(price);
+  const lastDigits = basePrice % 100;
+  
+  if (basePrice >= 10000) {
+    // For prices >= 10000, use 9900 endings (e.g., 12999)
+    return Math.floor(basePrice / 100) * 100 + 99;
+  } else if (basePrice >= 1000) {
+    // For prices >= 1000, use 99 endings (e.g., 1299)
+    return Math.floor(basePrice / 10) * 10 + 9;
+  } else {
+    // For prices < 1000, use 9 endings (e.g., 299)
+    return Math.floor(basePrice / 10) * 10 + 9;
+  }
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -124,6 +142,17 @@ PRICING RULES:
 4. Factor in sales velocity:
    - Low velocity (<0.5/day): Price elasticity is crucial
    - High velocity (>2/day): Opportunity for margin optimization
+5. Apply psychological pricing rules:
+   - For prices >= 10000 DH: Use 9900 endings (e.g., 12999)
+   - For prices >= 1000 DH: Use 99 endings (e.g., 1299)
+   - For prices < 1000 DH: Use 9 endings (e.g., 299)
+   - Avoid round numbers to create perception of better value
+   - Consider price anchoring with original price
+
+CURRENT MARKET POSITIONING:
+- Current Price Point: ${currentPrice} DH
+- Psychological Price Band: ${Math.floor(currentPrice * 0.85)}DH - ${Math.ceil(currentPrice * 1.15)}DH
+- Current Price Ending: ${currentPrice % 100}
 
 REQUIRED ANALYSIS:
 1. Evaluate current price positioning
@@ -146,12 +175,12 @@ PROVIDE A JSON RESPONSE WITH:
 
 IMPORTANT:
 - Price changes should be justified by multiple factors
-- Consider both revenue optimization and stock management
-- Account for current market position
-- Provide specific reasoning for the recommendation
-- Include quantified impact predictions
-- Always suggest a price change, even if small
-- Factor in the relationship between stock coverage and pricing strategy`;
+- Apply psychological pricing principles for better market acceptance
+- Consider price perception and value communication
+- Ensure price endings follow psychological pricing rules
+- Factor in price anchoring effects
+- Consider the psychological impact of price changes
+- Maintain credible price points`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4",
@@ -184,7 +213,8 @@ IMPORTANT:
       
       // Ensure aiResponse has the correct structure
       const validatedResponse = {
-        recommendedPrice: aiResponse.recommendedPrice || null,
+        recommendedPrice: aiResponse.recommendedPrice ? 
+          applyPsychologicalPricing(aiResponse.recommendedPrice) : null,
         confidence: aiResponse.confidence || 'low',
         reasoning: Array.isArray(aiResponse.reasoning) ? aiResponse.reasoning : [],
         impact: {
@@ -193,6 +223,13 @@ IMPORTANT:
         },
         risks: Array.isArray(aiResponse.risks) ? aiResponse.risks : []
       };
+
+      // Add psychological pricing explanation to reasoning
+      if (validatedResponse.recommendedPrice !== aiResponse.recommendedPrice) {
+        validatedResponse.reasoning.push(
+          `Prix ajusté à ${validatedResponse.recommendedPrice} DH pour optimiser l'impact psychologique (perception du prix)`
+        );
+      }
 
       // Validate recommended price
       if (crValue && validatedResponse.recommendedPrice <= crValue) {
