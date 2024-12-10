@@ -266,7 +266,7 @@ const SalesChart: React.FC<{ metrics: SalesMetrics; editingProduct: Product }> =
             <FiActivity className="h-4 w-4 text-gray-400" />
           </div>
           <div className="text-2xl font-bold text-gray-900">
-            {metrics.salesVelocity.toFixed(1)}
+            {metrics.salesVelocity.toFixed(2)}
           </div>
           <div className="mt-1 text-sm text-gray-500">
             unités/jour
@@ -1267,6 +1267,17 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
                                     <div className="text-2xl font-bold text-violet-700 mt-1">
                                       {formatNumber(aiAnalysis.recommendedPrice)} DH
                                     </div>
+                                    {/* Add price change indicator */}
+                                    <div className={cn(
+                                      "text-xs mt-1",
+                                      aiAnalysis.recommendedPrice > editingProduct['Prix Promo'] 
+                                        ? "text-emerald-600" 
+                                        : "text-red-600"
+                                    )}>
+                                      {aiAnalysis.recommendedPrice > editingProduct['Prix Promo'] ? '+' : ''}
+                                      {formatNumber(aiAnalysis.recommendedPrice - editingProduct['Prix Promo'])} DH
+                                      ({Math.round(((aiAnalysis.recommendedPrice - editingProduct['Prix Promo']) / editingProduct['Prix Promo']) * 100)}%)
+                                    </div>
                                   </div>
                                   <Button
                                     onClick={() => setNewBFPrice(aiAnalysis.recommendedPrice!)}
@@ -1276,18 +1287,68 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
                                     Appliquer
                                   </Button>
                                 </div>
-                                <div className="mt-3 grid grid-cols-2 gap-4 text-xs">
-                                  <div>
-                                    <span className="text-violet-600">Impact sur la marge:</span>
-                                    <span className="font-medium ml-1">
-                                      {aiAnalysis.impact.margin.toFixed(1)}%
-                                    </span>
+                                
+                                {/* Detailed Margin Analysis */}
+                                <div className="mt-4 space-y-3">
+                                  <div className="grid grid-cols-2 gap-4 text-xs">
+                                    {/* Current Margin */}
+                                    <div className="bg-gray-50 p-2 rounded-lg">
+                                      <span className="text-gray-600">Marge actuelle:</span>
+                                      <div className="font-medium mt-0.5">
+                                        {crValue && (
+                                          <>
+                                            <div>{formatNumber(Math.round(editingProduct['Prix Promo'] - crValue))} DH</div>
+                                            <div className="text-gray-500">
+                                              ({Math.round(((editingProduct['Prix Promo'] - crValue) / editingProduct['Prix Promo']) * 100)}%)
+                                            </div>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                    
+                                    {/* New Margin */}
+                                    <div className="bg-violet-50 p-2 rounded-lg">
+                                      <span className="text-violet-600">Nouvelle marge:</span>
+                                      <div className="font-medium mt-0.5">
+                                        {crValue && (
+                                          <>
+                                            <div>{formatNumber(Math.round(aiAnalysis.recommendedPrice - crValue))} DH</div>
+                                            <div className={cn(
+                                              ((aiAnalysis.recommendedPrice - crValue) / aiAnalysis.recommendedPrice) > 
+                                              ((editingProduct['Prix Promo'] - crValue) / editingProduct['Prix Promo'])
+                                                ? "text-emerald-600" 
+                                                : "text-red-600"
+                                              )}>
+                                              ({Math.round(((aiAnalysis.recommendedPrice - crValue) / aiAnalysis.recommendedPrice) * 100)}%)
+                                            </div>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <span className="text-violet-600">Vélocité estimée:</span>
-                                    <span className="font-medium ml-1">
-                                      {aiAnalysis.impact.expectedSales.toFixed(1)} unités/jour
-                                    </span>
+
+                                  {/* Sales Impact */}
+                                  <div className="border-t border-violet-100 pt-3 grid grid-cols-2 gap-4 text-xs">
+                                    <div>
+                                      <span className="text-violet-600">Vélocité actuelle:</span>
+                                      <div className="font-medium mt-0.5">
+                                        {salesMetrics?.salesVelocity.toFixed(2)} unités/jour
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <span className="text-violet-600">Vélocité estimée:</span>
+                                      <div className="font-medium mt-0.5">
+                                        {aiAnalysis.impact.expectedSales.toFixed(2)} unités/jour
+                                        <span className={cn(
+                                          "ml-1",
+                                          aiAnalysis.impact.expectedSales > (salesMetrics?.salesVelocity || 0)
+                                            ? "text-emerald-600"
+                                            : "text-red-600"
+                                        )}>
+                                          ({((aiAnalysis.impact.expectedSales / (salesMetrics?.salesVelocity || 1)) * 100 - 100).toFixed(1)}%)
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
