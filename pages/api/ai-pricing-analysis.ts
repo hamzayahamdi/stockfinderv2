@@ -1,8 +1,8 @@
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export default async function handler(
@@ -38,36 +38,33 @@ ${supplierReceptions.slice(-5).map((r: { date_reception: string; qte_recus: numb
   `- ${r.date_reception}: ${r.qte_recus} units`
 ).join('\n')}
 
-Provide your response in the following JSON format only, no other text:
+Based on this data, analyze the pricing strategy and provide recommendations. Return only a JSON object with this exact structure:
 {
-  "recommendedPrice": (number or null - your recommended price if change needed),
-  "confidence": ("high", "medium", or "low" - your confidence in this recommendation),
-  "reasoning": [array of strings explaining your reasoning],
+  "recommendedPrice": number | null,
+  "confidence": "high" | "medium" | "low",
+  "reasoning": string[],
   "impact": {
-    "margin": (number - expected margin percentage),
-    "expectedSales": (number - expected daily sales)
+    "margin": number,
+    "expectedSales": number
   },
-  "risks": [array of strings describing potential risks]
+  "risks": string[]
 }`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4",
+    const message = await anthropic.messages.create({
+      model: 'claude-3-sonnet-20240229',
+      max_tokens: 1024,
+      temperature: 0.7,
+      system: "You are a pricing strategy expert for an e-commerce business. Analyze data and provide actionable pricing recommendations. Always respond with valid JSON only.",
       messages: [
         {
-          role: "system",
-          content: "You are a pricing strategy expert for an e-commerce business. You must respond only with valid JSON, no other text."
-        },
-        {
-          role: "user",
+          role: 'user',
           content: prompt
         }
-      ],
-      temperature: 0.7,
+      ]
     });
 
-    // Ensure we get valid JSON
     try {
-      const aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
+      const aiResponse = JSON.parse(message.content[0].text);
       return res.status(200).json(aiResponse);
     } catch (parseError) {
       console.error('JSON Parse Error:', parseError);

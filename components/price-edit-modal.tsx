@@ -1221,8 +1221,94 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
                           </div>
                         ) : aiAnalysis ? (
                           <div className="space-y-4">
-                            {/* Rest of the AI analysis display remains similar,
-                                but now uses aiAnalysis instead of local recommendation */}
+                            {/* Recommendation Header */}
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <h4 className="text-sm font-medium text-gray-900">
+                                  Recommandation
+                                </h4>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  Basé sur l&apos;analyse des données historiques
+                                </p>
+                              </div>
+                              <div className={cn(
+                                "px-2 py-1 rounded-full text-xs font-medium",
+                                aiAnalysis.confidence === 'high' 
+                                  ? "bg-green-100 text-green-800"
+                                  : aiAnalysis.confidence === 'medium'
+                                  ? "bg-yellow-100 text-yellow-800"
+                                  : "bg-gray-100 text-gray-800"
+                              )}>
+                                Confiance {
+                                  aiAnalysis.confidence === 'high' ? 'élevée' :
+                                  aiAnalysis.confidence === 'medium' ? 'moyenne' : 'faible'
+                                }
+                              </div>
+                            </div>
+
+                            {/* Analysis Points */}
+                            <div className="space-y-2">
+                              {aiAnalysis.reasoning.map((reason, index) => (
+                                <div key={index} className="flex items-start space-x-2 text-sm">
+                                  <div className="mt-1">•</div>
+                                  <div>{reason}</div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Price Recommendation */}
+                            {aiAnalysis.recommendedPrice && (
+                              <div className="bg-gradient-to-br from-violet-50 to-fuchsia-50 rounded-lg border border-violet-200 p-4">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="text-sm font-medium text-violet-900">
+                                      Prix recommandé
+                                    </div>
+                                    <div className="text-2xl font-bold text-violet-700 mt-1">
+                                      {formatNumber(aiAnalysis.recommendedPrice)} DH
+                                    </div>
+                                  </div>
+                                  <Button
+                                    onClick={() => setNewBFPrice(aiAnalysis.recommendedPrice!)}
+                                    className="bg-violet-600 hover:bg-violet-700 text-white"
+                                    size="sm"
+                                  >
+                                    Appliquer
+                                  </Button>
+                                </div>
+                                <div className="mt-3 grid grid-cols-2 gap-4 text-xs">
+                                  <div>
+                                    <span className="text-violet-600">Impact sur la marge:</span>
+                                    <span className="font-medium ml-1">
+                                      {aiAnalysis.impact.margin.toFixed(1)}%
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-violet-600">Vélocité estimée:</span>
+                                    <span className="font-medium ml-1">
+                                      {aiAnalysis.impact.expectedSales.toFixed(1)} unités/jour
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Risks Section */}
+                            {aiAnalysis.risks.length > 0 && (
+                              <div className="mt-4">
+                                <h5 className="text-sm font-medium text-gray-900 mb-2">
+                                  Risques potentiels
+                                </h5>
+                                <div className="space-y-1">
+                                  {aiAnalysis.risks.map((risk, index) => (
+                                    <div key={index} className="flex items-start space-x-2 text-sm text-red-600">
+                                      <FiAlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                      <span>{risk}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="text-sm text-gray-500 text-center py-4">
