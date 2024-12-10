@@ -5,6 +5,10 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+const formatNumber = (num: number) => {
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+};
+
 const validateRequestData = (data: any) => {
   const {
     product,
@@ -107,9 +111,9 @@ ${supplierReceptions.slice(-5).map(r =>
 ).join('\n')}
 
 FINANCIAL METRICS:
-- Current Margin Amount: ${crValue ? formatNumber(Math.round(currentPrice - crValue)) : 'Unknown'} DH
+- Current Margin Amount: ${crValue ? Math.round(currentPrice - crValue) : 'Unknown'} DH
 - Margin Percentage: ${currentMargin ? currentMargin.toFixed(1) : 'Unknown'}%
-- Daily Profit: ${crValue ? formatNumber(Math.round((currentPrice - crValue) * currentVelocity)) : 'Unknown'} DH
+- Daily Profit: ${crValue ? Math.round((currentPrice - crValue) * currentVelocity) : 'Unknown'} DH
 
 PRICING RULES:
 1. NEVER recommend a price below cost price (${crValue} DH)
