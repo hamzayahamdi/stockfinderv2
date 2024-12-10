@@ -527,23 +527,40 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
   
   const newPriceInputRef = useRef<HTMLInputElement>(null);
 
-  // Add the fetchAIPricingAnalysis function inside the component
-  const fetchAIPricingAnalysis = async () => {
+  // Update the fetchAIPricingAnalysis function
+  const fetchAIPricingAnalysis = async (retryCount = 0) => {
     if (!editingProduct || !salesMetrics) return;
     
     setIsAiLoading(true);
     try {
+      // Validate data before sending
+      const validatedData = {
+        product: {
+          ...editingProduct,
+          'Prix Promo': Number(editingProduct['Prix Promo']),
+          'Total Stock': Number(editingProduct['Total Stock'])
+        },
+        salesMetrics: {
+          ...salesMetrics,
+          salesVelocity: Number(salesMetrics.salesVelocity),
+          totals: {
+            units: Number(salesMetrics.totals.units),
+            revenue: Number(salesMetrics.totals.revenue)
+          }
+        },
+        crValue: crValue ? Number(crValue) : null,
+        supplierReceptions: supplierReceptions.map(r => ({
+          ...r,
+          qte_recus: Number(r.qte_recus)
+        }))
+      };
+
       const response = await fetch('/api/ai-pricing-analysis', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          product: editingProduct,
-          salesMetrics,
-          crValue,
-          supplierReceptions
-        }),
+        body: JSON.stringify(validatedData),
       });
 
       const data = await response.json();
@@ -552,21 +569,54 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
         throw new Error(data.error || 'AI analysis failed');
       }
 
+      // Validate AI response
+      if (!isValidAIResponse(data)) {
+        throw new Error('Invalid AI response format');
+      }
+
       setAiAnalysis(data);
     } catch (error) {
       console.error('Error fetching AI analysis:', error);
+      
+      // Retry logic (max 2 retries)
+      if (retryCount < 2) {
+        console.log(`Retrying AI analysis (attempt ${retryCount + 1})...`);
+        setTimeout(() => fetchAIPricingAnalysis(retryCount + 1), 1000);
+        return;
+      }
+      
       setAiAnalysis(null);
     } finally {
       setIsAiLoading(false);
     }
   };
 
-  // Add the AI analysis useEffect inside the component
+  // Add validation function for AI response
+  const isValidAIResponse = (response: any): response is AIPricingAnalysis => {
+    return (
+      response &&
+      (typeof response.recommendedPrice === 'number' || response.recommendedPrice === null) &&
+      ['high', 'medium', 'low'].includes(response.confidence) &&
+      Array.isArray(response.reasoning) &&
+      typeof response.impact === 'object' &&
+      typeof response.impact.margin === 'number' &&
+      typeof response.impact.expectedSales === 'number' &&
+      Array.isArray(response.risks)
+    );
+  };
+
+  // Update the useEffect to include all required dependencies
   useEffect(() => {
-    if (editingProduct && salesMetrics && supplierReceptions.length > 0) {
+    if (
+      editingProduct && 
+      salesMetrics && 
+      supplierReceptions.length > 0 &&
+      typeof editingProduct['Prix Promo'] === 'number' &&
+      typeof salesMetrics.salesVelocity === 'number'
+    ) {
       fetchAIPricingAnalysis();
     }
-  }, [editingProduct, salesMetrics, supplierReceptions]);
+  }, [editingProduct, salesMetrics, supplierReceptions, crValue]);
 
   useEffect(() => {
     if (isOpen && editingProduct) {
