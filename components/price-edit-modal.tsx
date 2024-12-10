@@ -546,11 +546,16 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
         }),
       });
 
-      if (!response.ok) throw new Error('AI analysis failed');
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'AI analysis failed');
+      }
+
       setAiAnalysis(data);
     } catch (error) {
       console.error('Error fetching AI analysis:', error);
+      setAiAnalysis(null);
     } finally {
       setIsAiLoading(false);
     }

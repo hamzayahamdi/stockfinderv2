@@ -1,11 +1,9 @@
-import { Configuration, OpenAIApi } from 'openai';
+import OpenAI from 'openai';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-const configuration = new Configuration({
+const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
-const openai = new OpenAIApi(configuration);
 
 export default async function handler(
   req: NextApiRequest,
@@ -36,7 +34,7 @@ Last 28 Days Sales: ${salesMetrics?.totals.units || 0} units
 Last 28 Days Revenue: ${salesMetrics?.totals.revenue || 0} DH
 
 Recent Factory Receptions:
-${supplierReceptions.slice(-5).map(r => 
+${supplierReceptions.slice(-5).map((r: { date_reception: string; qte_recus: number }) => 
   `- ${r.date_reception}: ${r.qte_recus} units`
 ).join('\n')}
 
@@ -47,9 +45,19 @@ Based on this data, provide:
 4. Expected impact on sales and margins
 5. Risk assessment
 
-Format as JSON.`;
+Format the response as a JSON object with the following structure:
+{
+  "recommendedPrice": number | null,
+  "confidence": "high" | "medium" | "low",
+  "reasoning": string[],
+  "impact": {
+    "margin": number,
+    "expectedSales": number
+  },
+  "risks": string[]
+}`;
 
-    const completion = await openai.createChatCompletion({
+    const completion = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [
         {
@@ -62,13 +70,17 @@ Format as JSON.`;
         }
       ],
       temperature: 0.7,
+      response_format: { type: "json_object" }
     });
 
-    const aiResponse = JSON.parse(completion.data.choices[0].message?.content || '{}');
+    const aiResponse = JSON.parse(completion.choices[0].message.content);
 
     return res.status(200).json(aiResponse);
   } catch (error) {
     console.error('AI Analysis Error:', error);
-    return res.status(500).json({ message: 'Error analyzing pricing' });
+    return res.status(500).json({ 
+      message: 'Error analyzing pricing',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 } 
