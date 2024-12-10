@@ -5,7 +5,6 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Add data validation
 const validateRequestData = (data: any) => {
   const {
     product,
@@ -38,7 +37,6 @@ export default async function handler(
   }
 
   try {
-    // Validate request data
     const validatedData = validateRequestData(req.body);
     
     const { 
@@ -50,53 +48,65 @@ export default async function handler(
 
     const currentPrice = Number(product['Prix Promo']);
     const currentVelocity = Number(salesMetrics?.salesVelocity || 0);
+    const stockCoverage = salesMetrics?.salesVelocity ? Math.round(product['Total Stock'] / salesMetrics.salesVelocity) : 0;
+    const currentMargin = crValue ? ((currentPrice - crValue) / currentPrice) * 100 : null;
 
-    const prompt = `Analyze this product's pricing strategy based on the following data:
+    const prompt = `As a pricing strategy expert, analyze this product data and ALWAYS suggest a price change based on the following criteria:
 
-Product: ${product['Libellé']}
-Reference: ${product['Ref. produit']}
-Current Price: ${currentPrice} DH
-Cost Price: ${crValue || 'Unknown'} DH
-Total Stock: ${product['Total Stock']} units
-Current Sales Velocity: ${currentVelocity} units/day
-Stock Coverage: ${salesMetrics?.salesVelocity ? Math.round(product['Total Stock'] / salesMetrics.salesVelocity) : 0} days
-Last 28 Days Sales: ${salesMetrics?.totals.units || 0} units
-Last 28 Days Revenue: ${salesMetrics?.totals.revenue || 0} DH
+PRODUCT DATA:
+- Name: ${product['Libellé']}
+- Reference: ${product['Ref. produit']}
+- Current Price: ${currentPrice} DH
+- Cost Price: ${crValue || 'Unknown'} DH
+- Total Stock: ${product['Total Stock']} units
+- Current Sales Velocity: ${currentVelocity} units/day
+- Stock Coverage: ${stockCoverage} days
+- Last 28 Days Sales: ${salesMetrics?.totals.units || 0} units
+- Last 28 Days Revenue: ${salesMetrics?.totals.revenue || 0} DH
+${currentMargin !== null ? `- Current Margin: ${currentMargin.toFixed(1)}%` : ''}
 
-Recent Factory Receptions:
-${supplierReceptions.slice(-5).map((r: { date_reception: string; qte_recus: number }) => 
-  `- ${r.date_reception}: ${r.qte_recus} units`
-).join('\n')}
+DECISION CRITERIA:
+1. HIGH STOCK (Coverage > 90 days):
+   - Suggest 15-25% price reduction
+   - Higher reduction for higher coverage
 
-For the price elasticity calculation:
-- If recommending a price increase: Use a conservative elasticity estimate where each 1% price increase typically results in a 1.5% decrease in sales velocity
-- If recommending a price decrease: Use a moderate elasticity estimate where each 1% price decrease typically results in a 1.2% increase in sales velocity
-- The estimated velocity should never increase more than 100% or decrease more than 70% from the current velocity
+2. LOW STOCK (Coverage < 30 days) with high velocity (>1 unit/day):
+   - Suggest 10-20% price increase
+   - Higher increase for lower coverage
 
-Based on this data, analyze the pricing strategy and provide recommendations. Return only a JSON object with this exact structure:
+3. MARGIN OPTIMIZATION:
+   - If margin > 60%: Consider 10-15% reduction to boost sales
+   - If margin < 35%: Suggest 10-15% increase if velocity allows
+
+4. SALES VELOCITY:
+   - If velocity < 0.5 units/day: Suggest 15-25% reduction
+   - If velocity > 2 units/day: Consider 10-15% increase
+
+ELASTICITY RULES:
+- Price increase: Each 1% increase reduces velocity by 1.5%
+- Price decrease: Each 1% decrease increases velocity by 1.2%
+- Maximum velocity change: +100% to -70% of current
+
+You MUST provide a price recommendation. If no clear optimization needed, suggest at least a 5% adjustment based on the most relevant factor.
+
+Return a JSON object with this exact structure:
 {
-  "recommendedPrice": number | null,
+  "recommendedPrice": number,
   "confidence": "high" | "medium" | "low",
   "reasoning": string[],
   "impact": {
     "margin": number,
-    "expectedSales": number (calculate using the elasticity guidelines above)
+    "expectedSales": number
   },
   "risks": string[]
-}
-
-Example velocity calculation:
-If current price is 100 DH and recommended price is 90 DH (10% decrease):
-- Price change percentage = -10%
-- Expected velocity change = -10% * 1.2 = +12%
-- If current velocity is 5 units/day, new velocity = 5 * 1.12 = 5.6 units/day`;
+}`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4-turbo-preview",
+      model: "gpt-4-0125-preview",
       messages: [
         {
           role: "system",
-          content: "You are a pricing strategy expert for an e-commerce business. Use the provided elasticity guidelines to calculate expected sales velocity changes. Always respond with valid JSON only."
+          content: "You are a pricing optimization AI that ALWAYS suggests price changes. You analyze data thoroughly and provide specific, actionable recommendations with detailed reasoning."
         },
         {
           role: "user",
@@ -110,12 +120,11 @@ If current price is 100 DH and recommended price is 90 DH (10% decrease):
     try {
       const aiResponse = JSON.parse(completion.choices[0].message.content);
       
-      // Additional validation of AI response
-      if (!aiResponse || typeof aiResponse !== 'object') {
-        throw new Error('Invalid AI response structure');
+      if (!aiResponse || typeof aiResponse !== 'object' || aiResponse.recommendedPrice === null) {
+        throw new Error('Invalid AI response - must include price recommendation');
       }
 
-      // Validate and adjust velocity if needed
+      // Validate and adjust velocity
       if (aiResponse.impact && typeof aiResponse.impact.expectedSales === 'number') {
         const maxVelocity = currentVelocity * 2;
         const minVelocity = currentVelocity * 0.3;
@@ -125,10 +134,19 @@ If current price is 100 DH and recommended price is 90 DH (10% decrease):
           maxVelocity
         );
 
-        // Ensure margin calculation is correct
+        // Recalculate margin
         if (crValue && aiResponse.recommendedPrice) {
           aiResponse.impact.margin = ((aiResponse.recommendedPrice - crValue) / aiResponse.recommendedPrice) * 100;
         }
+      }
+
+      // Ensure we have a price recommendation
+      if (!aiResponse.recommendedPrice || aiResponse.recommendedPrice === currentPrice) {
+        // Force at least a 5% change if no change was suggested
+        const defaultChange = currentPrice * 0.05;
+        aiResponse.recommendedPrice = currentPrice + (stockCoverage > 45 ? -defaultChange : defaultChange);
+        aiResponse.confidence = "low";
+        aiResponse.reasoning.push("Suggesting minimal price adjustment for optimization");
       }
 
       return res.status(200).json(aiResponse);
