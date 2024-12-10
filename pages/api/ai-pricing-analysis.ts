@@ -1,8 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 export default async function handler(
@@ -50,21 +50,24 @@ Based on this data, analyze the pricing strategy and provide recommendations. Re
   "risks": string[]
 }`;
 
-    const message = await anthropic.messages.create({
-      model: 'claude-3-sonnet-20240229',
-      max_tokens: 1024,
-      temperature: 0.7,
-      system: "You are a pricing strategy expert for an e-commerce business. Analyze data and provide actionable pricing recommendations. Always respond with valid JSON only.",
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4-turbo-preview",
       messages: [
         {
-          role: 'user',
+          role: "system",
+          content: "You are a pricing strategy expert for an e-commerce business. Analyze data and provide actionable pricing recommendations. Always respond with valid JSON only."
+        },
+        {
+          role: "user",
           content: prompt
         }
-      ]
+      ],
+      temperature: 0.7,
+      response_format: { type: "json_object" }
     });
 
     try {
-      const aiResponse = JSON.parse(message.content[0].text);
+      const aiResponse = JSON.parse(completion.choices[0].message.content);
       return res.status(200).json(aiResponse);
     } catch (parseError) {
       console.error('JSON Parse Error:', parseError);
