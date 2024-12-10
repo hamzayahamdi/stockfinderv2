@@ -141,24 +141,51 @@ Return a JSON object with exact margin calculations included.`;
     try {
       const aiResponse = JSON.parse(completion.choices[0].message.content);
       
+      // Ensure aiResponse has the correct structure
+      const validatedResponse = {
+        recommendedPrice: aiResponse.recommendedPrice || null,
+        confidence: aiResponse.confidence || 'low',
+        reasoning: Array.isArray(aiResponse.reasoning) ? aiResponse.reasoning : [],
+        impact: {
+          margin: 0,
+          expectedSales: currentVelocity
+        },
+        risks: Array.isArray(aiResponse.risks) ? aiResponse.risks : []
+      };
+
       // Validate recommended price
-      if (crValue && aiResponse.recommendedPrice <= crValue) {
+      if (crValue && validatedResponse.recommendedPrice <= crValue) {
         console.error('AI suggested price below cost price, adjusting...');
-        aiResponse.recommendedPrice = crValue * 1.15; // Set minimum 15% margin
-        aiResponse.confidence = 'low';
-        aiResponse.reasoning.unshift('Price adjusted to maintain minimum margin');
+        validatedResponse.recommendedPrice = crValue * 1.15; // Set minimum 15% margin
+        validatedResponse.confidence = 'low';
+        validatedResponse.reasoning.unshift('Price adjusted to maintain minimum margin');
       }
 
       // Recalculate margins to ensure accuracy
-      if (crValue) {
-        const newMargin = validateMarginCalculation(aiResponse.recommendedPrice, crValue);
+      if (crValue && validatedResponse.recommendedPrice) {
+        const newMargin = validateMarginCalculation(validatedResponse.recommendedPrice, crValue);
         if (newMargin === null) {
           throw new Error('Invalid margin calculation in AI response');
         }
-        aiResponse.impact.margin = newMargin;
+        validatedResponse.impact.margin = newMargin;
+
+        // Calculate expected sales based on price elasticity
+        const priceChange = (validatedResponse.recommendedPrice - currentPrice) / currentPrice;
+        const elasticity = priceChange > 0 ? -1.5 : 1.2; // Different elasticity for price increase vs decrease
+        const velocityChange = priceChange * elasticity;
+        const newVelocity = currentVelocity * (1 + velocityChange);
+        
+        // Ensure velocity stays within reasonable bounds
+        validatedResponse.impact.expectedSales = Math.max(
+          currentVelocity * 0.3, // Min 30% of current
+          Math.min(
+            newVelocity,
+            currentVelocity * 2 // Max 200% of current
+          )
+        );
       }
 
-      return res.status(200).json(aiResponse);
+      return res.status(200).json(validatedResponse);
     } catch (parseError) {
       console.error('JSON Parse Error:', parseError);
       console.error('Raw AI Response:', completion.choices[0]?.message?.content);
