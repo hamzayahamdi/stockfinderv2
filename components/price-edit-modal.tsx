@@ -555,6 +555,8 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
         }))
       };
 
+      console.log('Sending data to AI:', validatedData);
+
       const response = await fetch('/api/ai-pricing-analysis', {
         method: 'POST',
         headers: {
@@ -566,11 +568,13 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
       const data = await response.json();
 
       if (!response.ok) {
+        console.error('AI Analysis Error Response:', data);
         throw new Error(data.error || 'AI analysis failed');
       }
 
       // Validate AI response
       if (!isValidAIResponse(data)) {
+        console.error('Invalid AI Response:', data);
         throw new Error('Invalid AI response format');
       }
 

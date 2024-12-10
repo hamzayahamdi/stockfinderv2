@@ -28,6 +28,22 @@ const validateRequestData = (data: any) => {
   };
 };
 
+const validateMarginCalculation = (price: number, costPrice: number | null) => {
+  if (!costPrice) return null;
+  
+  const margin = ((price - costPrice) / price) * 100;
+  // Sanity check - margins should be between -100% and +100%
+  if (margin < -100 || margin > 100) {
+    console.error('Invalid margin calculation detected:', {
+      price,
+      costPrice,
+      calculatedMargin: margin
+    });
+    return null;
+  }
+  return margin;
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -37,6 +53,8 @@ export default async function handler(
   }
 
   try {
+    console.log('Received request data:', JSON.stringify(req.body, null, 2));
+    
     const validatedData = validateRequestData(req.body);
     
     const { 
@@ -49,7 +67,13 @@ export default async function handler(
     const currentPrice = Number(product['Prix Promo']);
     const currentVelocity = Number(salesMetrics?.salesVelocity || 0);
     const stockCoverage = salesMetrics?.salesVelocity ? Math.round(product['Total Stock'] / salesMetrics.salesVelocity) : 0;
-    const currentMargin = crValue ? ((currentPrice - crValue) / currentPrice) * 100 : null;
+    
+    // Add validation for current margin calculation
+    const currentMargin = validateMarginCalculation(currentPrice, crValue);
+    
+    if (currentMargin === null && crValue) {
+      throw new Error('Invalid margin calculation detected');
+    }
 
     const prompt = `As a pricing strategy expert, analyze this product data and ALWAYS suggest a price change based on the following criteria:
 
@@ -58,16 +82,22 @@ PRODUCT DATA:
 - Reference: ${product['Ref. produit']}
 - Current Price: ${currentPrice} DH
 - Cost Price: ${crValue || 'Unknown'} DH
+- Current Margin: ${currentMargin ? currentMargin.toFixed(1) + '%' : 'Unknown'}
 - Total Stock: ${product['Total Stock']} units
 - Current Sales Velocity: ${currentVelocity} units/day
 - Stock Coverage: ${stockCoverage} days
 - Last 28 Days Sales: ${salesMetrics?.totals.units || 0} units
 - Last 28 Days Revenue: ${salesMetrics?.totals.revenue || 0} DH
-${currentMargin !== null ? `- Current Margin: ${currentMargin.toFixed(1)}%` : ''}
+
+IMPORTANT VALIDATION RULES:
+- The recommended price MUST be higher than the cost price (${crValue} DH)
+- Current margin is ${currentMargin ? currentMargin.toFixed(1) + '%' : 'unknown'} - verify this matches your calculations
+- All price recommendations must result in a positive margin
+- If cost price is ${crValue} DH, any price below this would result in a loss
 
 DECISION CRITERIA:
 1. HIGH STOCK (Coverage > 90 days):
-   - Suggest 15-25% price reduction
+   - Suggest 15-25% price reduction BUT never below cost price + 10%
    - Higher reduction for higher coverage
 
 2. LOW STOCK (Coverage < 30 days) with high velocity (>1 unit/day):
@@ -75,31 +105,15 @@ DECISION CRITERIA:
    - Higher increase for lower coverage
 
 3. MARGIN OPTIMIZATION:
-   - If margin > 60%: Consider 10-15% reduction to boost sales
-   - If margin < 35%: Suggest 10-15% increase if velocity allows
+   - Target margin should be between 25-60%
+   - Never suggest a price that results in a negative margin
+   - Current margin is ${currentMargin ? currentMargin.toFixed(1) + '%' : 'unknown'}
 
 4. SALES VELOCITY:
-   - If velocity < 0.5 units/day: Suggest 15-25% reduction
+   - If velocity < 0.5 units/day: Suggest reduction but maintain minimum 15% margin
    - If velocity > 2 units/day: Consider 10-15% increase
 
-ELASTICITY RULES:
-- Price increase: Each 1% increase reduces velocity by 1.5%
-- Price decrease: Each 1% decrease increases velocity by 1.2%
-- Maximum velocity change: +100% to -70% of current
-
-You MUST provide a price recommendation. If no clear optimization needed, suggest at least a 5% adjustment based on the most relevant factor.
-
-Return a JSON object with this exact structure:
-{
-  "recommendedPrice": number,
-  "confidence": "high" | "medium" | "low",
-  "reasoning": string[],
-  "impact": {
-    "margin": number,
-    "expectedSales": number
-  },
-  "risks": string[]
-}`;
+Return a JSON object with exact margin calculations included.`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4-0125-preview",
@@ -115,46 +129,43 @@ Return a JSON object with this exact structure:
       ],
       temperature: 0.7,
       response_format: { type: "json_object" }
+    }).catch(error => {
+      console.error('OpenAI API Error:', error);
+      throw new Error(`OpenAI API Error: ${error.message}`);
     });
+
+    if (!completion.choices[0]?.message?.content) {
+      throw new Error('No content in AI response');
+    }
 
     try {
       const aiResponse = JSON.parse(completion.choices[0].message.content);
       
-      if (!aiResponse || typeof aiResponse !== 'object' || aiResponse.recommendedPrice === null) {
-        throw new Error('Invalid AI response - must include price recommendation');
+      // Validate recommended price
+      if (crValue && aiResponse.recommendedPrice <= crValue) {
+        console.error('AI suggested price below cost price, adjusting...');
+        aiResponse.recommendedPrice = crValue * 1.15; // Set minimum 15% margin
+        aiResponse.confidence = 'low';
+        aiResponse.reasoning.unshift('Price adjusted to maintain minimum margin');
       }
 
-      // Validate and adjust velocity
-      if (aiResponse.impact && typeof aiResponse.impact.expectedSales === 'number') {
-        const maxVelocity = currentVelocity * 2;
-        const minVelocity = currentVelocity * 0.3;
-        
-        aiResponse.impact.expectedSales = Math.min(
-          Math.max(aiResponse.impact.expectedSales, minVelocity),
-          maxVelocity
-        );
-
-        // Recalculate margin
-        if (crValue && aiResponse.recommendedPrice) {
-          aiResponse.impact.margin = ((aiResponse.recommendedPrice - crValue) / aiResponse.recommendedPrice) * 100;
+      // Recalculate margins to ensure accuracy
+      if (crValue) {
+        const newMargin = validateMarginCalculation(aiResponse.recommendedPrice, crValue);
+        if (newMargin === null) {
+          throw new Error('Invalid margin calculation in AI response');
         }
-      }
-
-      // Ensure we have a price recommendation
-      if (!aiResponse.recommendedPrice || aiResponse.recommendedPrice === currentPrice) {
-        // Force at least a 5% change if no change was suggested
-        const defaultChange = currentPrice * 0.05;
-        aiResponse.recommendedPrice = currentPrice + (stockCoverage > 45 ? -defaultChange : defaultChange);
-        aiResponse.confidence = "low";
-        aiResponse.reasoning.push("Suggesting minimal price adjustment for optimization");
+        aiResponse.impact.margin = newMargin;
       }
 
       return res.status(200).json(aiResponse);
     } catch (parseError) {
       console.error('JSON Parse Error:', parseError);
+      console.error('Raw AI Response:', completion.choices[0]?.message?.content);
       return res.status(500).json({ 
         message: 'Error parsing AI response',
-        error: 'Invalid JSON format received from AI'
+        error: parseError instanceof Error ? parseError.message : 'JSON parse error',
+        raw: completion.choices[0]?.message?.content
       });
     }
 
@@ -162,7 +173,8 @@ Return a JSON object with this exact structure:
     console.error('AI Analysis Error:', error);
     return res.status(500).json({ 
       message: 'Error analyzing pricing',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
     });
   }
 } 
