@@ -40,7 +40,7 @@ interface PeriodOption {
 }
 
 const periodOptions: PeriodOption[] = [
-  { label: "Aujourd'hui", value: 'today', icon: <FiSun className="h-4 w-4" /> },
+  { label: "Aujourd&apos;hui", value: 'today', icon: <FiSun className="h-4 w-4" /> },
   { label: 'Hier', value: 'yesterday', icon: <FiMoon className="h-4 w-4" /> },
   { label: 'Cette semaine', value: 'this_week', icon: <FiCalendar className="h-4 w-4" /> },
   { label: 'Semaine dernière', value: 'last_week', icon: <FiClock className="h-4 w-4" /> },
