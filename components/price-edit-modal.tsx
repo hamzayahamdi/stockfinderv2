@@ -442,15 +442,15 @@ const generatePricingRecommendation = (
   
   // Stock level analysis
   if (stockCoverage > 120) {
-    reasons.push("Stock élevé: La couverture de stock actuelle est supérieure à 120 jours");
+    reasons.push("Stock élevé : La couverture de stock actuelle est supérieure à 120 jours");
     confidence = 'high';
   } else if (stockCoverage < 30 && salesVelocity > 0) {
-    reasons.push("Stock bas: La couverture de stock est inférieure à 30 jours");
+    reasons.push("Stock bas : La couverture de stock est inférieure à 30 jours");
   }
 
   // Sales velocity analysis
   if (salesVelocity < 0.5 && totalStock > 50) {
-    reasons.push("Faible rotation: Vélocité des ventes inférieure à 0.5 unités/jour");
+    reasons.push("Faible rotation : Vélocité des ventes inférieure à 0.5 unités/jour");
     confidence = 'high';
   }
 
@@ -458,9 +458,9 @@ const generatePricingRecommendation = (
   if (crValue) {
     const currentMargin = ((currentPrice - crValue) / currentPrice) * 100;
     if (currentMargin > 65) {
-      reasons.push(`Marge élevée: La marge actuelle est de ${currentMargin.toFixed(0)}%`);
+      reasons.push(`Marge élevée : La marge actuelle est de ${currentMargin.toFixed(0)}%`);
     } else if (currentMargin < 35) {
-      reasons.push(`Marge faible: La marge actuelle est de ${currentMargin.toFixed(0)}%`);
+      reasons.push(`Marge faible : La marge actuelle est de ${currentMargin.toFixed(0)}%`);
     }
   }
 
@@ -1221,7 +1221,7 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
                           </div>
                         ) : (
                           <div className="text-sm text-gray-500 text-center py-4">
-                            Erreur lors de l'analyse IA
+                            Erreur lors de l&apos;analyse IA
                           </div>
                         )}
                       </div>
