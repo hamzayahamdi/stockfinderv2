@@ -317,13 +317,17 @@ export function StockFinder() {
 
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const [pendingEditProduct, setPendingEditProduct] = useState<Product | null>(null);
+  // Comment out these state declarations
+  // const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  // const [pendingEditProduct, setPendingEditProduct] = useState<Product | null>(null);
 
   const handleEditClick = (product: Product, e: React.MouseEvent) => {
     e.stopPropagation();
-    setPendingEditProduct(product);
-    setIsPasswordModalOpen(true);
+    setEditingProduct(product);
+    setIsEditModalOpen(true);
+    // Comment out password modal logic
+    // setPendingEditProduct(product);
+    // setIsPasswordModalOpen(true);
   };
 
   const isMobile = useMediaQuery({ maxWidth: 768 });
@@ -875,14 +879,15 @@ export function StockFinder() {
     tableRow: `hover:bg-blue-50 transition-all duration-200`,
   };
 
-  const handlePasswordVerification = (success: boolean) => {
-    setIsPasswordModalOpen(false);
-    if (success && pendingEditProduct) {
-      setEditingProduct(pendingEditProduct);
-      setIsEditModalOpen(true);
-    }
-    setPendingEditProduct(null);
-  };
+  // Comment out the handlePasswordVerification function
+  // const handlePasswordVerification = (success: boolean) => {
+  //   setIsPasswordModalOpen(false);
+  //   if (success && pendingEditProduct) {
+  //     setEditingProduct(pendingEditProduct);
+  //     setIsEditModalOpen(true);
+  //   }
+  //   setPendingEditProduct(null);
+  // };
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans uppercase">
@@ -1370,6 +1375,8 @@ export function StockFinder() {
         onClose={() => setIsHistoryModalOpen(false)}
       />
 
+      {/* Comment out the PasswordModal component */}
+      {/*
       <PasswordModal 
         isOpen={isPasswordModalOpen}
         onClose={() => {
@@ -1378,6 +1385,7 @@ export function StockFinder() {
         }}
         onVerification={handlePasswordVerification}
       />
+      */}
     </div>
   )
 }
