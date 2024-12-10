@@ -75,59 +75,99 @@ export default async function handler(
       throw new Error('Invalid margin calculation detected');
     }
 
-    const prompt = `As a pricing strategy expert, analyze this product data and ALWAYS suggest a price change based on the following criteria:
+    const prompt = `As a pricing optimization expert, analyze this product's performance and suggest optimal pricing based on the following comprehensive data:
 
-PRODUCT DATA:
-- Name: ${product['Libellé']}
+PRODUCT INFORMATION:
+- Product: ${product['Libellé']}
 - Reference: ${product['Ref. produit']}
 - Current Price: ${currentPrice} DH
 - Cost Price: ${crValue || 'Unknown'} DH
 - Current Margin: ${currentMargin ? currentMargin.toFixed(1) + '%' : 'Unknown'}
+
+INVENTORY STATUS:
 - Total Stock: ${product['Total Stock']} units
-- Current Sales Velocity: ${currentVelocity} units/day
+- Stock Distribution:
+  ${Object.entries(product)
+    .filter(([key]) => key.startsWith('Stock '))
+    .map(([location, qty]) => `  ${location}: ${qty} units`)
+    .join('\n')}
 - Stock Coverage: ${stockCoverage} days
-- Last 28 Days Sales: ${salesMetrics?.totals.units || 0} units
-- Last 28 Days Revenue: ${salesMetrics?.totals.revenue || 0} DH
 
-IMPORTANT VALIDATION RULES:
-- The recommended price MUST be higher than the cost price (${crValue} DH)
-- Current margin is ${currentMargin ? currentMargin.toFixed(1) + '%' : 'unknown'} - verify this matches your calculations
-- All price recommendations must result in a positive margin
-- If cost price is ${crValue} DH, any price below this would result in a loss
+SALES PERFORMANCE:
+- Current Sales Velocity: ${currentVelocity.toFixed(2)} units/day
+- Last 28 Days:
+  * Total Units Sold: ${salesMetrics?.totals.units || 0}
+  * Total Revenue: ${salesMetrics?.totals.revenue || 0} DH
+  * Average Daily Revenue: ${((salesMetrics?.totals.revenue || 0) / 28).toFixed(2)} DH
 
-DECISION CRITERIA:
-1. HIGH STOCK (Coverage > 90 days):
-   - Suggest 15-25% price reduction BUT never below cost price + 10%
-   - Higher reduction for higher coverage
+SUPPLY CHAIN:
+Recent Factory Receptions:
+${supplierReceptions.slice(-5).map(r => 
+  `- ${r.date_reception}: ${r.qte_recus} units`
+).join('\n')}
 
-2. LOW STOCK (Coverage < 30 days) with high velocity (>1 unit/day):
-   - Suggest 10-20% price increase
-   - Higher increase for lower coverage
+FINANCIAL METRICS:
+- Current Margin Amount: ${crValue ? formatNumber(Math.round(currentPrice - crValue)) : 'Unknown'} DH
+- Margin Percentage: ${currentMargin ? currentMargin.toFixed(1) : 'Unknown'}%
+- Daily Profit: ${crValue ? formatNumber(Math.round((currentPrice - crValue) * currentVelocity)) : 'Unknown'} DH
 
-3. MARGIN OPTIMIZATION:
-   - Target margin should be between 25-60%
-   - Never suggest a price that results in a negative margin
-   - Current margin is ${currentMargin ? currentMargin.toFixed(1) + '%' : 'unknown'}
+PRICING RULES:
+1. NEVER recommend a price below cost price (${crValue} DH)
+2. Maintain minimum margin of 15%
+3. Consider stock coverage impact:
+   - High coverage (>90 days): Consider aggressive pricing
+   - Low coverage (<30 days): Protect stock with higher margins
+4. Factor in sales velocity:
+   - Low velocity (<0.5/day): Price elasticity is crucial
+   - High velocity (>2/day): Opportunity for margin optimization
 
-4. SALES VELOCITY:
-   - If velocity < 0.5 units/day: Suggest reduction but maintain minimum 15% margin
-   - If velocity > 2 units/day: Consider 10-15% increase
+REQUIRED ANALYSIS:
+1. Evaluate current price positioning
+2. Analyze stock coverage impact
+3. Consider sales velocity trends
+4. Calculate margin optimization potential
+5. Assess supply chain patterns
 
-Return a JSON object with exact margin calculations included.`;
+PROVIDE A JSON RESPONSE WITH:
+{
+  "recommendedPrice": number,
+  "confidence": "high" | "medium" | "low",
+  "reasoning": string[],
+  "impact": {
+    "margin": number,
+    "expectedSales": number
+  },
+  "risks": string[]
+}
+
+IMPORTANT:
+- Price changes should be justified by multiple factors
+- Consider both revenue optimization and stock management
+- Account for current market position
+- Provide specific reasoning for the recommendation
+- Include quantified impact predictions
+- Always suggest a price change, even if small
+- Factor in the relationship between stock coverage and pricing strategy`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4-0125-preview",
+      model: "gpt-4",
       messages: [
         {
           role: "system",
-          content: "You are a pricing optimization AI that ALWAYS suggests price changes. You analyze data thoroughly and provide specific, actionable recommendations with detailed reasoning."
+          content: `You are an expert pricing analyst with deep experience in e-commerce and retail. 
+          Your recommendations must be data-driven and consider multiple factors including:
+          - Stock management efficiency
+          - Margin optimization
+          - Sales velocity impact
+          - Market positioning
+          Always provide specific, actionable pricing recommendations with detailed justification.`
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      temperature: 0.7,
+      temperature: 0.4, // Reduced for more consistent responses
       response_format: { type: "json_object" }
     }).catch(error => {
       console.error('OpenAI API Error:', error);
