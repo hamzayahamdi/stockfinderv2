@@ -527,6 +527,9 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
   
   const newPriceInputRef = useRef<HTMLInputElement>(null);
 
+  // Add new state for showing AI analysis
+  const [showAiAnalysis, setShowAiAnalysis] = useState(false);
+
   // Update the fetchAIPricingAnalysis function
   const fetchAIPricingAnalysis = async (retryCount = 0) => {
     if (!editingProduct || !salesMetrics) return;
@@ -609,29 +612,14 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
     );
   };
 
-  // Update the useEffect that triggers AI analysis
-  useEffect(() => {
-    const shouldFetchAI = 
-      isOpen && // Only when modal is open
-      editingProduct && 
-      salesMetrics && 
-      supplierReceptions.length > 0 &&
-      typeof editingProduct['Prix Promo'] === 'number' &&
-      typeof salesMetrics.salesVelocity === 'number' &&
-      !isAiLoading; // Prevent refetch while loading
-
-    if (shouldFetchAI) {
-      fetchAIPricingAnalysis();
-    }
-  }, [isOpen]); // Only depend on modal open state
-
   useEffect(() => {
     if (isOpen && editingProduct) {
       setNewBFPrice(editingProduct['Prix Promo'] || 0);
       setNewInitialPrice(editingProduct['Prix Promo'] || 0);
       setIsImageLoading(true);
+      setShowAiAnalysis(false); // Reset AI analysis visibility when modal opens
       
-      // Fetch all data in parallel
+      // Fetch other data...
       Promise.all([
         fetchProductImage(editingProduct['Ref. produit']),
         fetchCRValue(editingProduct['Ref. produit']),
@@ -927,11 +915,12 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
                                   data: getAggregatedData(supplierReceptions, timeAggregation).map(r => r.qte_recus),
                                   label: 'Quantité reçue',
                                   color: '#8b5cf6',
-                                  valueFormatter: (value: number | null, index: number) => {
-                                    if (value === null || index === undefined) return '';
+                                  valueFormatter: (value: number | null) => {
+                                    if (value === null) return '';
                                     const data = getAggregatedData(supplierReceptions, timeAggregation);
+                                    const index = data.findIndex(d => d.qte_recus === value);
+                                    if (index === -1) return `${value} unités`;
                                     const item = data[index];
-                                    if (!item) return '';
 
                                     const date = new Date(item.date_reception);
                                     let dateStr = '';
@@ -1244,196 +1233,227 @@ export const PriceEditModal: React.FC<PriceEditModalProps> = ({
                       </div>
                     </motion.div>
 
-                    {/* AI Pricing Analysis */}
+                    {/* AI Analysis Button */}
                     <motion.div 
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.3 }}
-                      className="bg-gradient-to-br from-white to-gray-50 rounded-lg border border-gray-200 overflow-hidden"
+                      transition={{ delay: 0.2 }}
                     >
-                      <div className="px-3 py-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-1.5">
-                            <FiTrendingUp className="h-3.5 w-3.5" />
-                            <h3 className="text-xs font-medium">Analyse IA des prix</h3>
-                          </div>
-                          {!isAiLoading && (
-                            <Button
-                              onClick={fetchAIPricingAnalysis}
-                              size="xs"
-                              className="bg-white/10 hover:bg-white/20 text-white"
-                            >
-                              Actualiser
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="p-4">
-                        {isAiLoading ? (
-                          <div className="flex items-center justify-center py-8">
-                            <Spinner />
-                            <span className="ml-3 text-sm text-gray-500">
-                              Analyse en cours...
-                            </span>
-                          </div>
-                        ) : aiAnalysis ? (
-                          <div className="space-y-4">
-                            {/* Recommendation Header */}
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <h4 className="text-sm font-medium text-gray-900">
-                                  Recommandation
-                                </h4>
-                                <p className="text-xs text-gray-500 mt-0.5">
-                                  Basé sur l&apos;analyse des données historiques
-                                </p>
+                      {!showAiAnalysis ? (
+                        <Button
+                          onClick={() => {
+                            setShowAiAnalysis(true);
+                            fetchAIPricingAnalysis();
+                          }}
+                          className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white"
+                          size="lg"
+                        >
+                          <FiTrendingUp className="mr-2 h-4 w-4" />
+                          Analyser avec IA
+                        </Button>
+                      ) : (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="bg-gradient-to-br from-white to-gray-50 rounded-lg border border-gray-200 overflow-hidden"
+                        >
+                          <div className="px-3 py-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-1.5">
+                                <FiTrendingUp className="h-3.5 w-3.5" />
+                                <h3 className="text-xs font-medium">Analyse IA des prix</h3>
                               </div>
-                              <div className={cn(
-                                "px-2 py-1 rounded-full text-xs font-medium",
-                                aiAnalysis.confidence === 'high' 
-                                  ? "bg-green-100 text-green-800"
-                                  : aiAnalysis.confidence === 'medium'
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : "bg-gray-100 text-gray-800"
-                              )}>
-                                Confiance {
-                                  aiAnalysis.confidence === 'high' ? 'élevée' :
-                                  aiAnalysis.confidence === 'medium' ? 'moyenne' : 'faible'
-                                }
-                              </div>
-                            </div>
-
-                            {/* Analysis Points */}
-                            <div className="space-y-2">
-                              {aiAnalysis.reasoning.map((reason, index) => (
-                                <div key={index} className="flex items-start space-x-2 text-sm">
-                                  <div className="mt-1">•</div>
-                                  <div>{reason}</div>
-                                </div>
-                              ))}
-                            </div>
-
-                            {/* Price Recommendation */}
-                            {aiAnalysis.recommendedPrice && (
-                              <div className="bg-gradient-to-br from-violet-50 to-fuchsia-50 rounded-lg border border-violet-200 p-4">
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <div className="text-sm font-medium text-violet-900">
-                                      Prix recommandé
-                                    </div>
-                                    <div className="text-2xl font-bold text-violet-700 mt-1">
-                                      {formatNumber(aiAnalysis.recommendedPrice)} DH
-                                    </div>
-                                    {/* Add price change indicator */}
-                                    <div className={cn(
-                                      "text-xs mt-1",
-                                      aiAnalysis.recommendedPrice > editingProduct['Prix Promo'] 
-                                        ? "text-emerald-600" 
-                                        : "text-red-600"
-                                    )}>
-                                      {aiAnalysis.recommendedPrice > editingProduct['Prix Promo'] ? '+' : ''}
-                                      {formatNumber(aiAnalysis.recommendedPrice - editingProduct['Prix Promo'])} DH
-                                      ({Math.round(((aiAnalysis.recommendedPrice - editingProduct['Prix Promo']) / editingProduct['Prix Promo']) * 100)}%)
-                                    </div>
-                                  </div>
+                              <div className="flex items-center space-x-2">
+                                {!isAiLoading && (
                                   <Button
-                                    onClick={() => setNewBFPrice(aiAnalysis.recommendedPrice!)}
-                                    className="bg-violet-600 hover:bg-violet-700 text-white"
+                                    onClick={() => fetchAIPricingAnalysis()}
                                     size="sm"
+                                    className="bg-white/10 hover:bg-white/20 text-white"
                                   >
-                                    Appliquer
+                                    Actualiser
                                   </Button>
-                                </div>
-                                
-                                {/* Detailed Margin Analysis */}
-                                <div className="mt-4 space-y-3">
-                                  <div className="grid grid-cols-2 gap-4 text-xs">
-                                    {/* Current Margin */}
-                                    <div className="bg-gray-50 p-2 rounded-lg">
-                                      <span className="text-gray-600">Marge actuelle:</span>
-                                      <div className="font-medium mt-0.5">
-                                        {crValue && (
-                                          <>
-                                            <div>{formatNumber(Math.round(editingProduct['Prix Promo'] - crValue))} DH</div>
-                                            <div className="text-gray-500">
-                                              ({Math.round(((editingProduct['Prix Promo'] - crValue) / editingProduct['Prix Promo']) * 100)}%)
-                                            </div>
-                                          </>
-                                        )}
-                                      </div>
-                                    </div>
-                                    
-                                    {/* New Margin */}
-                                    <div className="bg-violet-50 p-2 rounded-lg">
-                                      <span className="text-violet-600">Nouvelle marge:</span>
-                                      <div className="font-medium mt-0.5">
-                                        {crValue && (
-                                          <>
-                                            <div>{formatNumber(Math.round(aiAnalysis.recommendedPrice - crValue))} DH</div>
-                                            <div className={cn(
-                                              ((aiAnalysis.recommendedPrice - crValue) / aiAnalysis.recommendedPrice) > 
-                                              ((editingProduct['Prix Promo'] - crValue) / editingProduct['Prix Promo'])
-                                                ? "text-emerald-600" 
-                                                : "text-red-600"
-                                              )}>
-                                              ({Math.round(((aiAnalysis.recommendedPrice - crValue) / aiAnalysis.recommendedPrice) * 100)}%)
-                                            </div>
-                                          </>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Sales Impact */}
-                                  <div className="border-t border-violet-100 pt-3 grid grid-cols-2 gap-4 text-xs">
-                                    <div>
-                                      <span className="text-violet-600">Vélocité actuelle:</span>
-                                      <div className="font-medium mt-0.5">
-                                        {salesMetrics?.salesVelocity.toFixed(2)} unités/jour
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <span className="text-violet-600">Vélocité estimée:</span>
-                                      <div className="font-medium mt-0.5">
-                                        {aiAnalysis.impact.expectedSales.toFixed(2)} unités/jour
-                                        <span className={cn(
-                                          "ml-1",
-                                          aiAnalysis.impact.expectedSales > (salesMetrics?.salesVelocity || 0)
-                                            ? "text-emerald-600"
-                                            : "text-red-600"
-                                        )}>
-                                          ({((aiAnalysis.impact.expectedSales / (salesMetrics?.salesVelocity || 1)) * 100 - 100).toFixed(1)}%)
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
+                                )}
+                                <Button
+                                  onClick={() => setShowAiAnalysis(false)}
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-white hover:bg-white/10"
+                                >
+                                  <FiX className="h-4 w-4" />
+                                </Button>
                               </div>
-                            )}
+                            </div>
+                          </div>
+                          
+                          {/* Rest of your existing AI analysis content */}
+                          <div className="p-4">
+                            {isAiLoading ? (
+                              <div className="flex items-center justify-center py-8">
+                                <Spinner />
+                                <span className="ml-3 text-sm text-gray-500">
+                                  Analyse en cours...
+                                </span>
+                              </div>
+                            ) : aiAnalysis ? (
+                              <div className="space-y-4">
+                                {/* Recommendation Header */}
+                                <div className="flex items-start justify-between">
+                                  <div>
+                                    <h4 className="text-sm font-medium text-gray-900">
+                                      Recommandation
+                                    </h4>
+                                    <p className="text-xs text-gray-500 mt-0.5">
+                                      Basé sur l&apos;analyse des données historiques
+                                    </p>
+                                  </div>
+                                  <div className={cn(
+                                    "px-2 py-1 rounded-full text-xs font-medium",
+                                    aiAnalysis.confidence === 'high' 
+                                      ? "bg-green-100 text-green-800"
+                                      : aiAnalysis.confidence === 'medium'
+                                      ? "bg-yellow-100 text-yellow-800"
+                                      : "bg-gray-100 text-gray-800"
+                                  )}>
+                                    Confiance {
+                                      aiAnalysis.confidence === 'high' ? 'élevée' :
+                                      aiAnalysis.confidence === 'medium' ? 'moyenne' : 'faible'
+                                    }
+                                  </div>
+                                </div>
 
-                            {/* Risks Section */}
-                            {aiAnalysis.risks.length > 0 && (
-                              <div className="mt-4">
-                                <h5 className="text-sm font-medium text-gray-900 mb-2">
-                                  Risques potentiels
-                                </h5>
-                                <div className="space-y-1">
-                                  {aiAnalysis.risks.map((risk, index) => (
-                                    <div key={index} className="flex items-start space-x-2 text-sm text-red-600">
-                                      <FiAlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                                      <span>{risk}</span>
+                                {/* Analysis Points */}
+                                <div className="space-y-2">
+                                  {aiAnalysis.reasoning.map((reason, index) => (
+                                    <div key={index} className="flex items-start space-x-2 text-sm">
+                                      <div className="mt-1">•</div>
+                                      <div>{reason}</div>
                                     </div>
                                   ))}
                                 </div>
+
+                                {/* Price Recommendation */}
+                                {aiAnalysis.recommendedPrice && (
+                                  <div className="bg-gradient-to-br from-violet-50 to-fuchsia-50 rounded-lg border border-violet-200 p-4">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <div className="text-sm font-medium text-violet-900">
+                                          Prix recommandé
+                                        </div>
+                                        <div className="text-2xl font-bold text-violet-700 mt-1">
+                                          {formatNumber(aiAnalysis.recommendedPrice)} DH
+                                        </div>
+                                        {/* Add price change indicator */}
+                                        <div className={cn(
+                                          "text-xs mt-1",
+                                          aiAnalysis.recommendedPrice > editingProduct['Prix Promo'] 
+                                            ? "text-emerald-600" 
+                                            : "text-red-600"
+                                        )}>
+                                          {aiAnalysis.recommendedPrice > editingProduct['Prix Promo'] ? '+' : ''}
+                                          {formatNumber(aiAnalysis.recommendedPrice - editingProduct['Prix Promo'])} DH
+                                          ({Math.round(((aiAnalysis.recommendedPrice - editingProduct['Prix Promo']) / editingProduct['Prix Promo']) * 100)}%)
+                                        </div>
+                                      </div>
+                                      <Button
+                                        onClick={() => setNewBFPrice(aiAnalysis.recommendedPrice!)}
+                                        className="bg-violet-600 hover:bg-violet-700 text-white"
+                                        size="sm"
+                                      >
+                                        Appliquer
+                                      </Button>
+                                    </div>
+                                    
+                                    {/* Detailed Margin Analysis */}
+                                    <div className="mt-4 space-y-3">
+                                      <div className="grid grid-cols-2 gap-4 text-xs">
+                                        {/* Current Margin */}
+                                        <div className="bg-gray-50 p-2 rounded-lg">
+                                          <span className="text-gray-600">Marge actuelle:</span>
+                                          <div className="font-medium mt-0.5">
+                                            {crValue && (
+                                              <>
+                                                <div>{formatNumber(Math.round(editingProduct['Prix Promo'] - crValue))} DH</div>
+                                                <div className="text-gray-500">
+                                                  ({Math.round(((editingProduct['Prix Promo'] - crValue) / editingProduct['Prix Promo']) * 100)}%)
+                                                </div>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                        
+                                        {/* New Margin */}
+                                        <div className="bg-violet-50 p-2 rounded-lg">
+                                          <span className="text-violet-600">Nouvelle marge:</span>
+                                          <div className="font-medium mt-0.5">
+                                            {crValue && (
+                                              <>
+                                                <div>{formatNumber(Math.round(aiAnalysis.recommendedPrice - crValue))} DH</div>
+                                                <div className={cn(
+                                                  ((aiAnalysis.recommendedPrice - crValue) / aiAnalysis.recommendedPrice) > 
+                                                  ((editingProduct['Prix Promo'] - crValue) / editingProduct['Prix Promo'])
+                                                    ? "text-emerald-600" 
+                                                    : "text-red-600"
+                                                )}>
+                                                  ({Math.round(((aiAnalysis.recommendedPrice - crValue) / aiAnalysis.recommendedPrice) * 100)}%)
+                                                </div>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Sales Impact */}
+                                      <div className="border-t border-violet-100 pt-3 grid grid-cols-2 gap-4 text-xs">
+                                        <div>
+                                          <span className="text-violet-600">Vélocité actuelle:</span>
+                                          <div className="font-medium mt-0.5">
+                                            {salesMetrics?.salesVelocity.toFixed(2)} unités/jour
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <span className="text-violet-600">Vélocité estimée:</span>
+                                          <div className="font-medium mt-0.5">
+                                            {aiAnalysis.impact.expectedSales.toFixed(2)} unités/jour
+                                            <span className={cn(
+                                              "ml-1",
+                                              aiAnalysis.impact.expectedSales > (salesMetrics?.salesVelocity || 0)
+                                                ? "text-emerald-600"
+                                                : "text-red-600"
+                                            )}>
+                                              ({((aiAnalysis.impact.expectedSales / (salesMetrics?.salesVelocity || 1)) * 100 - 100).toFixed(1)}%)
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Risks Section */}
+                                {aiAnalysis.risks.length > 0 && (
+                                  <div className="mt-4">
+                                    <h5 className="text-sm font-medium text-gray-900 mb-2">
+                                      Risques potentiels
+                                    </h5>
+                                    <div className="space-y-1">
+                                      {aiAnalysis.risks.map((risk, index) => (
+                                        <div key={index} className="flex items-start space-x-2 text-sm text-red-600">
+                                          <FiAlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                          <span>{risk}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-gray-500 text-center py-4">
+                                Erreur lors de l&apos;analyse IA
                               </div>
                             )}
                           </div>
-                        ) : (
-                          <div className="text-sm text-gray-500 text-center py-4">
-                            Erreur lors de l&apos;analyse IA
-                          </div>
-                        )}
-                      </div>
+                        </motion.div>
+                      )}
                     </motion.div>
                   </div>
                 </div>

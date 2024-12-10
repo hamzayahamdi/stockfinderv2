@@ -164,18 +164,15 @@ IMPORTANT:
           - Margin optimization
           - Sales velocity impact
           - Market positioning
-          Always provide specific, actionable pricing recommendations with detailed justification.`
+          Always provide specific, actionable pricing recommendations with detailed justification.
+          IMPORTANT: Respond only with valid JSON format.`
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      temperature: 0.4, // Reduced for more consistent responses
-      response_format: { type: "json_object" }
-    }).catch(error => {
-      console.error('OpenAI API Error:', error);
-      throw new Error(`OpenAI API Error: ${error.message}`);
+      temperature: 0.4 // Reduced for more consistent responses
     });
 
     if (!completion.choices[0]?.message?.content) {
