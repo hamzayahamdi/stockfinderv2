@@ -38,23 +38,16 @@ ${supplierReceptions.slice(-5).map((r: { date_reception: string; qte_recus: numb
   `- ${r.date_reception}: ${r.qte_recus} units`
 ).join('\n')}
 
-Based on this data, provide:
-1. A recommended price (if change needed)
-2. Confidence level (high/medium/low)
-3. Detailed reasoning
-4. Expected impact on sales and margins
-5. Risk assessment
-
-Format the response as a JSON object with the following structure:
+Provide your response in the following JSON format only, no other text:
 {
-  "recommendedPrice": number | null,
-  "confidence": "high" | "medium" | "low",
-  "reasoning": string[],
+  "recommendedPrice": (number or null - your recommended price if change needed),
+  "confidence": ("high", "medium", or "low" - your confidence in this recommendation),
+  "reasoning": [array of strings explaining your reasoning],
   "impact": {
-    "margin": number,
-    "expectedSales": number
+    "margin": (number - expected margin percentage),
+    "expectedSales": (number - expected daily sales)
   },
-  "risks": string[]
+  "risks": [array of strings describing potential risks]
 }`;
 
     const completion = await openai.chat.completions.create({
@@ -62,7 +55,7 @@ Format the response as a JSON object with the following structure:
       messages: [
         {
           role: "system",
-          content: "You are a pricing strategy expert for an e-commerce business. Analyze data and provide actionable pricing recommendations in JSON format."
+          content: "You are a pricing strategy expert for an e-commerce business. You must respond only with valid JSON, no other text."
         },
         {
           role: "user",
@@ -70,12 +63,20 @@ Format the response as a JSON object with the following structure:
         }
       ],
       temperature: 0.7,
-      response_format: { type: "json_object" }
     });
 
-    const aiResponse = JSON.parse(completion.choices[0].message.content);
+    // Ensure we get valid JSON
+    try {
+      const aiResponse = JSON.parse(completion.choices[0].message.content || '{}');
+      return res.status(200).json(aiResponse);
+    } catch (parseError) {
+      console.error('JSON Parse Error:', parseError);
+      return res.status(500).json({ 
+        message: 'Error parsing AI response',
+        error: 'Invalid JSON format received from AI'
+      });
+    }
 
-    return res.status(200).json(aiResponse);
   } catch (error) {
     console.error('AI Analysis Error:', error);
     return res.status(500).json({ 
