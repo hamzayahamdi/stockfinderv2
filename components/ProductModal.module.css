@@ -1,0 +1,46 @@
+.modal {
+  /* Your existing modal styles */
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.productName {
+  font-size: 24px;
+  font-weight: bold;
+  margin: 0;
+}
+
+.dimensions {
+  background-color: #f0f0f0;
+  color: #333;
+  padding: 5px 10px;
+  border-radius: 15px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.subHeader {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.ref {
+  font-size: 14px;
+  color: #666;
+  margin-right: 10px;
+}
+
+.category {
+  background-color: #e0e0e0;
+  color: #333;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+}
