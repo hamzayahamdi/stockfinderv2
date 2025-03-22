@@ -459,7 +459,7 @@ export function StockFinder() {
   const [pendingEditType, setPendingEditType] = useState<string>('');
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('Salon en L');
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [inStockCount, setInStockCount] = useState(0);
   const [outOfStockCount, setOutOfStockCount] = useState(0);
@@ -695,6 +695,14 @@ export function StockFinder() {
   };
 
   // Update the useEffect hook that handles search term changes
+  // Initial load effect
+  useEffect(() => {
+    if (isInitialLoad) {
+      fetchProducts('category', 'Salon en L');
+      setIsInitialLoad(false);
+    }
+  }, [isInitialLoad]);
+
   useEffect(() => {
     if (searchTerm && searchTerm.length >= 3) {
       fetchProducts('search', searchTerm);
