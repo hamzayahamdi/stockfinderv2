@@ -37,6 +37,7 @@ import { Notification } from './Notification';
 import { PrixPromoHistory } from './prix-promo-history';
 import { PasswordModal } from './password-modal';
 import { BlackFridayEditModal } from './black-friday-edit-modal';
+import { BouskouraStockModal } from './bouskoura-stock-modal';
 
 type Category = {
   name: string;
@@ -64,6 +65,7 @@ const normalizeText = (text: string): string => {
 };
 
 const categories: Category[] = [
+  { name: 'Bouskoura-Temp', catalogue: null, isAll: false },
   { name: 'ALL', catalogue: null, isAll: true },
   { name: 'Salon en L', catalogue: 'tissues' },
   { name: 'Salon en U', catalogue: 'tissues' },
@@ -449,8 +451,16 @@ interface CategoryCount {
   [key: string]: number;
 }
 
+// Add these new interfaces near the top of the file, after other interfaces
+interface LoadingState {
+  isLoading: boolean;
+  message: string;
+  progress: number;
+}
+
 export function StockFinder() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [statsVisible, setStatsVisible] = useState(false); // Changed to false for collapsed by default
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -478,11 +488,19 @@ export function StockFinder() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sorting, setSorting] = useState<SortingState>([]);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isBouskouraModalOpen, setIsBouskouraModalOpen] = useState(false);
   
   // Refs
   const sidebarRef = useRef<HTMLDivElement>(null);
   const productNameRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Update the state declarations in the StockFinder component
+  const [loadingState, setLoadingState] = useState<LoadingState>({
+    isLoading: false,
+    message: '',
+    progress: 0
+  });
 
   const handleEditClick = (product: Product, e: React.MouseEvent, editType: EditType) => {
     e.stopPropagation();
@@ -650,17 +668,36 @@ export function StockFinder() {
     ).values());
   };
 
+  // Replace the old fetchProducts function with this updated version
   const fetchProducts = async (type: 'category' | 'search', query: string) => {
-    if (type === 'category') setIsLoading(true);
+    if (type === 'category') {
+      setLoadingState({
+        isLoading: true,
+        message: 'Connexion au serveur...',
+        progress: 0
+      });
+    }
+    
     try {
       let data;
       
       if (type === 'category' && query === 'ALL') {
+        setLoadingState(prev => ({
+          ...prev,
+          message: 'Chargement de toutes les catégories...',
+          progress: 20
+        }));
         data = await fetchAllProducts();
       } else {
         const url = `https://phpstack-937973-4763176.cloudwaysapps.com/data1.php?type=${type}&query=${
           type === 'search' ? encodeURIComponent(normalizeText(query)) : encodeURIComponent(query)
         }`;
+        
+        setLoadingState(prev => ({
+          ...prev,
+          message: 'Récupération des données...',
+          progress: 40
+        }));
         
         const response = await fetch(url);
         if (!response.ok) {
@@ -669,7 +706,12 @@ export function StockFinder() {
         data = await response.json();
       }
       
-      console.log('Received data:', data);
+      setLoadingState(prev => ({
+        ...prev,
+        message: 'Traitement des données...',
+        progress: 60
+      }));
+
       if (Array.isArray(data)) {
         const transformedData = data.map(item => ({
           ...item,
@@ -678,8 +720,22 @@ export function StockFinder() {
           bf_price: parseFloat(item.bf_price) || undefined,
         }));
 
+        setLoadingState(prev => ({
+          ...prev,
+          message: 'Calcul des statistiques...',
+          progress: 80
+        }));
+
         setAllProducts(transformedData);
         setFilteredProducts(transformedData);
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        setLoadingState(prev => ({
+          ...prev,
+          message: 'Finalisation...',
+          progress: 100
+        }));
       } else if (data.error) {
         console.error('API Error:', data.error);
         setAllProducts([]);
@@ -690,7 +746,13 @@ export function StockFinder() {
       setAllProducts([]);
       setFilteredProducts([]);
     } finally {
-      if (type === 'category') setIsLoading(false);
+      setTimeout(() => {
+        setLoadingState({
+          isLoading: false,
+          message: '',
+          progress: 0
+        });
+      }, 500);
     }
   };
 
@@ -756,6 +818,12 @@ export function StockFinder() {
 
   // Update the handleCategorySelect function
   const handleCategorySelect = (categoryName: string) => {
+    if (categoryName === 'Bouskoura-Temp') {
+      setIsBouskouraModalOpen(true);
+      setSidebarOpen(false); // Close the sidebar on mobile after selection
+      return;
+    }
+    
     setSelectedCategory(categoryName);
     setSearchTerm(''); // Clear the search term
     fetchProducts('category', categoryName); // Fetch products for the selected category
@@ -785,8 +853,16 @@ export function StockFinder() {
       : null;
   }, []);
 
+  const sortedFilteredProducts = useMemo(() => {
+    return [...filteredProducts].sort((a, b) => {
+      const aValue = (a['Total Stock'] || 0) * (parseFloat(a['Prix Promo']?.toString() || '0') || 0);
+      const bValue = (b['Total Stock'] || 0) * (parseFloat(b['Prix Promo']?.toString() || '0') || 0);
+      return bValue - aValue; // Descending order
+    });
+  }, [filteredProducts]);
+
   const table = useReactTable({
-    data: filteredProducts,
+    data: sortedFilteredProducts,
     columns,
     getCoreRowModel: getCoreRowModel(),
     onSortingChange: setSorting,
@@ -1366,19 +1442,37 @@ const calculateStoreStats = useMemo<StoreStatsMap>(() => {
               variant={selectedCategory === category.name ? "secondary" : "ghost"}
               className={cn(
                 "w-full justify-between mb-1 text-left transition-colors duration-300 text-[11px] py-1 px-2 rounded-md font-bold",
-                category.isAll
+                category.name === 'Bouskoura-Temp'
+                  ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:from-emerald-600 hover:to-teal-700"
+                : category.isAll
                   ? "bg-gradient-to-r from-blue-600 to-blue-400 text-white hover:from-blue-700 hover:to-blue-500"
                   : "hover:bg-white hover:text-[#0156B3]",
-                selectedCategory === category.name && !category.isAll && "bg-white text-[#0156B3]"
+                selectedCategory === category.name && !category.isAll && category.name !== 'Bouskoura-Temp' && "bg-white text-[#0156B3]"
               )}
               onClick={() => handleCategorySelect(category.name)}
             >
-              <span>{category.name.toUpperCase()}</span>
-              {categoryCounts[category.name] !== undefined && (
-                <span className="bg-white text-[#0156B3] text-[9px] px-1.5 py-0.5 rounded-full">
-                  {categoryCounts[category.name]}
-                </span>
-              )}
+              <div className="flex items-center justify-between w-full">
+                {category.name === 'Bouskoura-Temp' ? (
+                  <div className="flex items-center gap-2">
+                    <div className="bg-white/20 rounded-lg p-1">
+                      <FiPackage className="w-3 h-3" />
+                    </div>
+                    <span>{category.name.toUpperCase()}</span>
+                  </div>
+                ) : (
+                  <span>{category.name.toUpperCase()}</span>
+                )}
+                {categoryCounts[category.name] !== undefined && (
+                  <span className={cn(
+                    "text-[9px] px-1.5 py-0.5 rounded-full",
+                    category.name === 'Bouskoura-Temp'
+                      ? "bg-white text-emerald-600"
+                      : "bg-white text-[#0156B3]"
+                  )}>
+                    {categoryCounts[category.name]}
+                  </span>
+                )}
+              </div>
             </Button>
           ))}
         </nav>
@@ -1457,75 +1551,106 @@ const calculateStoreStats = useMemo<StoreStatsMap>(() => {
           <div className="flex-none hidden md:block">
             {/* Individual Stores */}
             <div className="bg-gradient-to-br from-slate-50 to-white rounded-xl shadow-lg overflow-hidden border border-slate-100">
-              <div className="p-2">
-                <h2 className="text-xs font-bold text-slate-800 mb-2 flex items-center gap-1.5">
-                  <div className="bg-blue-600 rounded-md p-1">
-                    <FiPackage className="text-white h-3 w-3" />
+              <div 
+                className="p-3 cursor-pointer hover:bg-opacity-90 transition-colors duration-200 bg-gradient-to-r from-purple-600 to-indigo-600"
+                onClick={() => setStatsVisible(!statsVisible)}
+              >
+                <h2 className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="bg-white/20 rounded-lg p-2 shadow-sm">
+                      <FiPieChart className="text-white h-4 w-4" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-white font-bold tracking-wide text-sm">
+                        Statistiques des Stocks
+                      </span>
+                      <span className="text-[10px] text-purple-200">
+                        {statsVisible ? 'Cliquez pour masquer les statistiques' : 'Cliquez pour afficher les statistiques'}
+                      </span>
+                    </div>
                   </div>
-                  Statistiques des Stocks
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 hover:bg-white/20 rounded-lg text-white"
+                  >
+                    {statsVisible ? (
+                      <FiMinus className="h-5 w-5" />
+                    ) : (
+                      <FiPlus className="h-5 w-5" />
+                    )}
+                  </Button>
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
-                  <StoreStatCard
-                    title="Résumé Global"
-                    qty={calculateStoreStats.total.qty}
-                    value={calculateStoreStats.total.value}
-                    inStock={calculateStoreStats.total.inStock}
-                    outOfStock={calculateStoreStats.total.outOfStock}
-                    uniqueProducts={calculateStoreStats.total.uniqueProducts}
-                    className="bg-gradient-to-br from-blue-600 to-blue-700 !text-white col-span-1 shadow-lg shadow-blue-500/10 border border-blue-500/10"
-                  />
-                  <StoreStatCard
-                    title="STOCK SKE"
-                    qty={calculateStoreStats.ske.qty}
-                    value={calculateStoreStats.ske.value}
-                    inStock={calculateStoreStats.ske.inStock}
-                    outOfStock={calculateStoreStats.ske.outOfStock}
-                    uniqueProducts={calculateStoreStats.ske.uniqueProducts}
-                    percentageOfTotal={calculateStoreStats.ske.percentageOfTotal}
-                    className="bg-gradient-to-br from-emerald-500 to-green-600 !text-white shadow-lg shadow-green-500/10 border border-green-500/10"
-                  />
-                  <StoreStatCard
-                    title="STOCK CASA"
-                    qty={calculateStoreStats.casa.qty}
-                    value={calculateStoreStats.casa.value}
-                    inStock={calculateStoreStats.casa.inStock}
-                    outOfStock={calculateStoreStats.casa.outOfStock}
-                    uniqueProducts={calculateStoreStats.casa.uniqueProducts}
-                    percentageOfTotal={calculateStoreStats.casa.percentageOfTotal}
-                    className="bg-gradient-to-br from-blue-50 to-white"
-                  />
-                  <StoreStatCard
-                    title="STOCK RABAT"
-                    qty={calculateStoreStats.rabat.qty}
-                    value={calculateStoreStats.rabat.value}
-                    inStock={calculateStoreStats.rabat.inStock}
-                    outOfStock={calculateStoreStats.rabat.outOfStock}
-                    uniqueProducts={calculateStoreStats.rabat.uniqueProducts}
-                    percentageOfTotal={calculateStoreStats.rabat.percentageOfTotal}
-                    className="bg-gradient-to-br from-blue-50 to-white"
-                  />
-                  <StoreStatCard
-                    title="STOCK MARRAKECH"
-                    qty={calculateStoreStats.marrakech.qty}
-                    value={calculateStoreStats.marrakech.value}
-                    inStock={calculateStoreStats.marrakech.inStock}
-                    outOfStock={calculateStoreStats.marrakech.outOfStock}
-                    uniqueProducts={calculateStoreStats.marrakech.uniqueProducts}
-                    percentageOfTotal={calculateStoreStats.marrakech.percentageOfTotal}
-                    className="bg-gradient-to-br from-blue-50 to-white"
-                  />
-                  <StoreStatCard
-                    title="STOCK TANGER"
-                    qty={calculateStoreStats.tanger.qty}
-                    value={calculateStoreStats.tanger.value}
-                    inStock={calculateStoreStats.tanger.inStock}
-                    outOfStock={calculateStoreStats.tanger.outOfStock}
-                    uniqueProducts={calculateStoreStats.tanger.uniqueProducts}
-                    percentageOfTotal={calculateStoreStats.tanger.percentageOfTotal}
-                    className="bg-gradient-to-br from-blue-50 to-white"
-                  />
-                </div>
               </div>
+              <AnimatePresence>
+                {statsVisible && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden bg-gradient-to-br from-purple-50 to-white"
+                  >
+                    <div className="p-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
+                        <StoreStatCard
+                          title="Résumé Global"
+                          qty={calculateStoreStats.total.qty}
+                          value={calculateStoreStats.total.value}
+                          inStock={calculateStoreStats.total.inStock}
+                          outOfStock={calculateStoreStats.total.outOfStock}
+                          className="bg-gradient-to-br from-purple-600 to-indigo-600 !text-white col-span-1 shadow-lg shadow-purple-500/20 border border-purple-500/10"
+                        />
+                        <StoreStatCard
+                          title="STOCK SKE"
+                          qty={calculateStoreStats.ske.qty}
+                          value={calculateStoreStats.ske.value}
+                          inStock={calculateStoreStats.ske.inStock}
+                          outOfStock={calculateStoreStats.ske.outOfStock}
+                          percentageOfTotal={calculateStoreStats.ske.percentageOfTotal}
+                          className="bg-gradient-to-br from-emerald-500 to-green-600 !text-white shadow-lg shadow-green-500/20 border border-green-500/10"
+                        />
+                        <StoreStatCard
+                          title="STOCK CASA"
+                          qty={calculateStoreStats.casa.qty}
+                          value={calculateStoreStats.casa.value}
+                          inStock={calculateStoreStats.casa.inStock}
+                          outOfStock={calculateStoreStats.casa.outOfStock}
+                          percentageOfTotal={calculateStoreStats.casa.percentageOfTotal}
+                          className="bg-gradient-to-br from-purple-50 to-white border border-purple-100"
+                        />
+                        <StoreStatCard
+                          title="STOCK RABAT"
+                          qty={calculateStoreStats.rabat.qty}
+                          value={calculateStoreStats.rabat.value}
+                          inStock={calculateStoreStats.rabat.inStock}
+                          outOfStock={calculateStoreStats.rabat.outOfStock}
+                          percentageOfTotal={calculateStoreStats.rabat.percentageOfTotal}
+                          className="bg-gradient-to-br from-purple-50 to-white border border-purple-100"
+                        />
+                        <StoreStatCard
+                          title="STOCK MARRAKECH"
+                          qty={calculateStoreStats.marrakech.qty}
+                          value={calculateStoreStats.marrakech.value}
+                          inStock={calculateStoreStats.marrakech.inStock}
+                          outOfStock={calculateStoreStats.marrakech.outOfStock}
+                          percentageOfTotal={calculateStoreStats.marrakech.percentageOfTotal}
+                          className="bg-gradient-to-br from-purple-50 to-white border border-purple-100"
+                        />
+                        <StoreStatCard
+                          title="STOCK TANGER"
+                          qty={calculateStoreStats.tanger.qty}
+                          value={calculateStoreStats.tanger.value}
+                          inStock={calculateStoreStats.tanger.inStock}
+                          outOfStock={calculateStoreStats.tanger.outOfStock}
+                          percentageOfTotal={calculateStoreStats.tanger.percentageOfTotal}
+                          className="bg-gradient-to-br from-purple-50 to-white border border-purple-100"
+                        />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
           {/* Redesigned Catalogue Section */}
@@ -1602,20 +1727,25 @@ const calculateStoreStats = useMemo<StoreStatsMap>(() => {
                       </button>
                     )}
                   </div>
-                  <Button 
-                    onClick={exportToExcel} 
-                    className="bg-[#0156B3] hover:bg-[#0167D3] text-white transition-all duration-300 font-medium text-base py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm hover:shadow-md whitespace-nowrap"
-                  >
-                    <FiDownload className="h-5 w-5" />
-                    Export
-                  </Button>
-                  <Button 
-                    onClick={() => setIsHistoryModalOpen(true)}
-                    className="bg-slate-800 hover:bg-slate-700 text-white transition-all duration-300 font-medium text-base py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm hover:shadow-md whitespace-nowrap"
-                  >
-                    <FiClock className="h-5 w-5" />
-                    Pricing History
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md whitespace-nowrap">
+                      Trié par valeur de stock (Qté × Prix)
+                    </span>
+                    <Button 
+                      onClick={exportToExcel} 
+                      className="bg-[#0156B3] hover:bg-[#0167D3] text-white transition-all duration-300 font-medium text-base py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm hover:shadow-md whitespace-nowrap"
+                    >
+                      <FiDownload className="h-5 w-5" />
+                      Export
+                    </Button>
+                    <Button 
+                      onClick={() => setIsHistoryModalOpen(true)}
+                      className="bg-slate-800 hover:bg-slate-700 text-white transition-all duration-300 font-medium text-base py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm hover:shadow-md whitespace-nowrap"
+                    >
+                      <FiClock className="h-5 w-5" />
+                      Pricing History
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1844,7 +1974,12 @@ const calculateStoreStats = useMemo<StoreStatsMap>(() => {
         </Dialog.Portal>
       </Dialog.Root>
 
-      {isLoading && <LoadingOverlay />}
+      {loadingState.isLoading && (
+        <LoadingOverlay 
+          message={loadingState.message}
+          progress={loadingState.progress}
+        />
+      )}
 
       <PriceEditModal 
         isOpen={isEditModalOpen}
@@ -1886,6 +2021,12 @@ const calculateStoreStats = useMemo<StoreStatsMap>(() => {
         }}
         editingProduct={editingProduct}
         onUpdateBFPrice={handleUpdateBFPrice}
+      />
+
+      {/* Add the BouskouraStockModal near the end of the component, before the closing div */}
+      <BouskouraStockModal 
+        isOpen={isBouskouraModalOpen}
+        onClose={() => setIsBouskouraModalOpen(false)}
       />
     </div>
   )
